@@ -325,6 +325,7 @@
           luckyDrawLastUsedAt: null,
           checkInStreak: 0,
           lastCheckInDate: null,
+          lastCheckInTime: null,
           claimedCheckInDays: [],
           records: [],
         };
@@ -364,6 +365,12 @@
       const TASK_COOLDOWN = 24 * 3600 * 1000;
       const isTaskAvailable = !userState.taskCompletedAt || now >= userState.taskCompletedAt + TASK_COOLDOWN;
       const taskCountdownMs = userState.taskCompletedAt ? Math.max(0, userState.taskCompletedAt + TASK_COOLDOWN - now) : 0;
+
+      const CHECKIN_COOLDOWN = 24 * 3600 * 1000;
+      const checkInRemainingMs = userState.lastCheckInTime
+        ? Math.max(0, userState.lastCheckInTime + CHECKIN_COOLDOWN - now)
+        : 0;
+      const isCheckInCooldown = checkInRemainingMs > 0;
 
       const formatTime = (ms) => {
         const s = Math.floor(ms / 1000);
@@ -405,20 +412,18 @@
         showToastMsg(isRtl ? 'تم استلام أرباح المهمة +1.50 USDT!' : 'Claimed +1.50 USDT profit!');
       };
 
-      const todayDateStr = new Date().toISOString().split('T')[0];
-      const hasCheckedInToday = userState.lastCheckInDate === todayDateStr;
-
       const handleClaimCheckIn = () => {
-        if (hasCheckedInToday) {
-          showToastMsg(isRtl ? 'لقد قمت بتسجيل الدخول لليوم بالفعل!' : 'Already checked in today!');
+        if (isCheckInCooldown) {
+          showToastMsg(isRtl ? 'يرجى الانتظار 24 ساعة حتى يفتح اليوم التالي!' : 'Please wait 24 hours until next day unlocks!');
           return;
         }
+        const nowMs = Date.now();
         const newStreak = (userState.checkInStreak || 0) + 1;
         const rewardObj = DAILY_CHECK_IN_REWARDS.find((r) => r.day === newStreak) || { reward: 0 };
         const reward = rewardObj.reward;
 
         const newRecord = {
-          id: 'CHK' + Date.now(),
+          id: 'CHK' + nowMs,
           type: isRtl ? `تسجيل يومي (اليوم ${newStreak})` : `Daily Check-In (Day ${newStreak})`,
           amount: reward,
           date: new Date().toISOString().replace('T', ' ').substring(0, 16),
@@ -429,7 +434,8 @@
           ...prev,
           balance: Math.round((prev.balance + reward) * 100) / 100,
           checkInStreak: newStreak,
-          lastCheckInDate: todayDateStr,
+          lastCheckInDate: new Date().toISOString().split('T')[0],
+          lastCheckInTime: nowMs,
           claimedCheckInDays: [...(prev.claimedCheckInDays || []), newStreak],
           records: reward > 0 ? [newRecord, ...(prev.records || [])] : (prev.records || []),
         }));
@@ -447,16 +453,6 @@
               : `Checked in for Day ${newStreak}! Cash rewards start on Day 3.`
           );
         }
-      };
-
-      const handleSimulateNextDay = () => {
-        setUserState((prev) => ({
-          ...prev,
-          lastCheckInDate: null,
-        }));
-        showToastMsg(
-          isRtl ? 'تم فتح اليوم التالي للتجربة السريعة بنجاح!' : 'Fast-forwarded to next day!'
-        );
       };
 
       // Handle spinning lucky wheel
@@ -1163,36 +1159,41 @@
               )}
             </main>
 
-            {/* Lucky Wheel & Daily Check-In Floating Action Bubbles */}
+            {/* Lucky Wheel & Daily Check-In Floating Action Bubbles (Stacked vertically, compact, bottom-right) */}
             {!showLuckyWheel && !showDailyCheckIn && (
-              <>
-                {/* Lucky Wheel Bubble */}
+              <div
+                style={{
+                  position: 'fixed',
+                  bottom: '4.75rem',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  width: '100%',
+                  maxWidth: '28rem',
+                  pointerEvents: 'none',
+                  zIndex: 35,
+                }}
+              >
                 <div
                   style={{
-                    position: 'fixed',
-                    bottom: '4.85rem',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    width: '100%',
-                    maxWidth: '28rem',
-                    pointerEvents: 'none',
-                    zIndex: 35,
+                    position: 'absolute',
+                    right: '0.75rem',
+                    bottom: '0',
                   }}
-                  className={`px-4 flex ${isRtl ? 'justify-start' : 'justify-end'}`}
+                  className="flex flex-col items-center gap-2.5 pointer-events-auto"
                 >
+                  {/* 1. Lucky Wheel Bubble (Top) */}
                   <button
                     type="button"
                     onClick={() => setShowLuckyWheel(true)}
-                    style={{ pointerEvents: 'auto' }}
                     aria-label={isRtl ? 'عجلة الحظ' : 'Lucky Wheel'}
                     className="group relative flex flex-col items-center cursor-pointer select-none active:scale-90 transition-transform duration-200"
                     title={isRtl ? 'اضغط لفتح عجلة الحظ' : 'Click to open Lucky Wheel'}
                   >
-                    <span className="absolute -inset-1 rounded-full bg-gradient-to-r from-amber-400 via-rose-500 to-red-600 opacity-70 blur-[5px] group-hover:opacity-100 transition animate-pulse pointer-events-none" />
-                    <div className="relative w-14 h-14 rounded-full bg-gradient-to-tr from-amber-500 via-red-600 to-rose-700 p-0.5 shadow-[0_8px_20px_rgba(220,38,38,0.5)] border-2 border-amber-300 flex items-center justify-center">
+                    <span className="absolute -inset-1 rounded-full bg-gradient-to-r from-amber-400 via-rose-500 to-red-600 opacity-70 blur-[4px] group-hover:opacity-100 transition animate-pulse pointer-events-none" />
+                    <div className="relative w-11 h-11 rounded-full bg-gradient-to-tr from-amber-500 via-red-600 to-rose-700 p-0.5 shadow-[0_4px_14px_rgba(220,38,38,0.45)] border-2 border-amber-300 flex items-center justify-center">
                       <div className="w-full h-full rounded-full bg-gray-950 flex items-center justify-center overflow-hidden relative">
                         <svg
-                          className="w-10 h-10 animate-spin-slow"
+                          className="w-8 h-8 animate-spin-slow"
                           viewBox="0 0 100 100"
                           fill="none"
                           xmlns="http://www.w3.org/2000/svg"
@@ -1209,57 +1210,42 @@
                           <circle cx="50" cy="50" r="14" fill="#7f1d1d" stroke="#fef08a" strokeWidth="3" />
                           <circle cx="50" cy="50" r="6" fill="#fef08a" />
                         </svg>
-                        <div className="absolute top-0.5 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[7px] border-t-amber-300 drop-shadow" />
+                        <div className="absolute top-0.5 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[3px] border-l-transparent border-r-[3px] border-r-transparent border-t-[5px] border-t-amber-300 drop-shadow" />
                       </div>
-                      <div className="absolute -top-1 -right-1 bg-gradient-to-r from-red-600 to-rose-600 text-white text-[10px] font-black rounded-full min-w-[20px] h-5 px-1 flex items-center justify-center border-2 border-white shadow-md">
+                      <div className="absolute -top-1 -right-1 bg-gradient-to-r from-red-600 to-rose-600 text-white text-[9px] font-black rounded-full min-w-[18px] h-4 px-0.5 flex items-center justify-center border border-white shadow-sm">
                         {userState.luckyDrawRemaining > 0 ? userState.luckyDrawRemaining : 0}
                       </div>
                     </div>
-                    <span className="relative -mt-2 bg-gray-900/95 text-amber-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-amber-400/50 shadow-lg tracking-tight whitespace-nowrap">
+                    <span className="relative -mt-1.5 bg-gray-900/95 text-amber-300 text-[9px] font-extrabold px-1.5 py-0.5 rounded-full border border-amber-400/50 shadow-md tracking-tight whitespace-nowrap">
                       {isRtl ? 'عجلة الحظ' : 'Lucky Wheel'}
                     </span>
                   </button>
-                </div>
 
-                {/* Daily Check-In Bubble */}
-                <div
-                  style={{
-                    position: 'fixed',
-                    bottom: '4.85rem',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    width: '100%',
-                    maxWidth: '28rem',
-                    pointerEvents: 'none',
-                    zIndex: 35,
-                  }}
-                  className={`px-4 flex ${isRtl ? 'justify-end' : 'justify-start'}`}
-                >
+                  {/* 2. Daily Check-In Bubble (Bottom) */}
                   <button
                     type="button"
                     onClick={() => setShowDailyCheckIn(true)}
-                    style={{ pointerEvents: 'auto' }}
                     aria-label={isRtl ? 'جدول تسجيل الدخول اليومي' : 'Daily Check-In'}
                     className="group relative flex flex-col items-center cursor-pointer select-none active:scale-90 transition-transform duration-200"
                     title={isRtl ? 'اضغط لفتح جدول تسجيل الدخول اليومي' : 'Click to open Daily Check-In'}
                   >
-                    <span className="absolute -inset-1 rounded-full bg-gradient-to-r from-amber-400 via-emerald-500 to-teal-600 opacity-70 blur-[5px] group-hover:opacity-100 transition animate-pulse pointer-events-none" />
-                    <div className="relative w-14 h-14 rounded-full bg-gradient-to-tr from-amber-500 via-emerald-600 to-teal-700 p-0.5 shadow-[0_8px_20px_rgba(16,185,129,0.45)] border-2 border-amber-300 flex items-center justify-center">
+                    <span className="absolute -inset-1 rounded-full bg-gradient-to-r from-amber-400 via-emerald-500 to-teal-600 opacity-70 blur-[4px] group-hover:opacity-100 transition animate-pulse pointer-events-none" />
+                    <div className="relative w-11 h-11 rounded-full bg-gradient-to-tr from-amber-500 via-emerald-600 to-teal-700 p-0.5 shadow-[0_4px_14px_rgba(16,185,129,0.45)] border-2 border-amber-300 flex items-center justify-center">
                       <div className="w-full h-full rounded-full bg-gray-950 flex flex-col items-center justify-center overflow-hidden relative">
-                        <Icons.Task className="w-6 h-6 text-amber-300 drop-shadow group-hover:scale-110 transition-transform" />
-                        <span className="text-[9px] font-black text-emerald-400 tracking-tighter leading-none mt-0.5">500$</span>
-                        {!hasCheckedInToday && <span className="absolute top-1.5 right-2 w-2 h-2 rounded-full bg-red-500 animate-ping" />}
+                        <Icons.Task className="w-4 h-4 text-amber-300 drop-shadow group-hover:scale-110 transition-transform" />
+                        <span className="text-[7.5px] font-black text-emerald-400 tracking-tighter leading-none mt-0.5">500$</span>
+                        {!isCheckInCooldown && <span className="absolute top-1 right-1.5 w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />}
                       </div>
-                      <div className="absolute -top-1 -right-1 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[10px] font-black rounded-full min-w-[22px] h-5 px-1 flex items-center justify-center border-2 border-white shadow-md">
+                      <div className="absolute -top-1 -right-1 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[9px] font-black rounded-full min-w-[18px] h-4 px-0.5 flex items-center justify-center border border-white shadow-sm">
                         {userState.checkInStreak > 0 ? (isRtl ? `${userState.checkInStreak}ي` : `D${userState.checkInStreak}`) : '30D'}
                       </div>
                     </div>
-                    <span className="relative -mt-2 bg-gray-900/95 text-emerald-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-emerald-400/50 shadow-lg tracking-tight whitespace-nowrap">
+                    <span className="relative -mt-1.5 bg-gray-900/95 text-emerald-300 text-[9px] font-extrabold px-1.5 py-0.5 rounded-full border border-emerald-400/50 shadow-md tracking-tight whitespace-nowrap">
                       {isRtl ? 'تسجيل يومي' : 'Daily Sign-in'}
                     </span>
                   </button>
                 </div>
-              </>
+              </div>
             )}
 
             {/* --- Bottom Navigation --- */}
@@ -1418,16 +1404,30 @@
 
             {/* Daily Check-In 30-Day Rewards Modal */}
             {showDailyCheckIn && (
-              <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 overflow-y-auto">
-                <div className="w-full max-w-md bg-white rounded-3xl overflow-hidden shadow-2xl border border-amber-200/60 flex flex-col max-h-[92vh]">
+              <div
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) setShowDailyCheckIn(false);
+                }}
+                className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 overflow-y-auto cursor-pointer"
+              >
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-full max-w-md bg-white rounded-3xl overflow-hidden shadow-2xl border border-amber-200/60 flex flex-col max-h-[92vh] cursor-default"
+                >
                   {/* Header */}
-                  <div className="bg-gradient-to-r from-gray-950 via-red-950 to-amber-950 text-white p-4 relative border-b border-amber-500/20">
+                  <div className="bg-gradient-to-r from-gray-950 via-red-950 to-amber-950 text-white p-4 sm:p-5 relative border-b border-amber-500/20">
+                    {/* Prominent Exit Button (X) */}
                     <button
+                      id="close-standalone-checkin-btn"
                       type="button"
                       onClick={() => setShowDailyCheckIn(false)}
-                      className="absolute top-3.5 left-3.5 rtl:left-auto rtl:right-3.5 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-gray-300 hover:text-white transition cursor-pointer"
+                      className={`absolute top-3.5 ${
+                        isRtl ? 'left-3.5' : 'right-3.5'
+                      } w-9 h-9 rounded-full bg-white/20 hover:bg-red-600 active:scale-90 border border-white/30 text-white flex items-center justify-center transition-all shadow-md cursor-pointer z-20 group`}
+                      title={isRtl ? 'إغلاق (✕)' : 'Close (✕)'}
+                      aria-label="Close"
                     >
-                      <Icons.X className="w-4 h-4" />
+                      <Icons.X className="w-5 h-5 text-white group-hover:rotate-90 transition-transform duration-200" />
                     </button>
                     <span className="bg-gradient-to-r from-amber-500 to-red-500 text-gray-950 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider inline-block mb-1">
                       {isRtl ? 'برنامج المكافآت المتراكمة' : 'Loyalty Check-In'}
@@ -1449,7 +1449,7 @@
                       </div>
                       <div className="border-x border-white/10">
                         <span className="text-[10px] text-gray-300 block">{isRtl ? 'اليوم التالي' : 'Next'}</span>
-                        <span className="font-black text-white">{isRtl ? `اليوم ${(userState.checkInStreak || 0) + (hasCheckedInToday ? 1 : 1)}` : `Day ${(userState.checkInStreak || 0) + 1}`}</span>
+                        <span className="font-black text-white">{isRtl ? `اليوم ${(userState.checkInStreak || 0) + 1}` : `Day ${(userState.checkInStreak || 0) + 1}`}</span>
                       </div>
                       <div>
                         <span className="text-[10px] text-gray-300 block">{isRtl ? 'الجائزة الكبرى' : 'Top Prize'}</span>
@@ -1458,19 +1458,34 @@
                     </div>
                   </div>
 
-                  {/* Notice */}
-                  <div className="bg-amber-50 border-b border-amber-200/80 px-4 py-2 text-[11px] text-amber-900 font-medium">
-                    {isRtl
-                      ? 'ملاحظة: اليوم 1 و 2 لتثبيت السلسلة، وتبدأ المكافآت المالية من اليوم 3 (1.77 USDT).'
-                      : 'Note: Days 1 & 2 establish streak. Cash rewards unlock starting Day 3 (1.77 USDT).'}
-                  </div>
+                  {/* 24-Hour Cooldown Timer Notice */}
+                  {isCheckInCooldown ? (
+                    <div className="bg-gradient-to-r from-amber-950 via-gray-900 to-red-950 border-b border-amber-500/30 p-3 text-white flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Icons.Clock className="w-4 h-4 text-amber-400 animate-pulse" />
+                        <span className="text-xs font-bold text-amber-300">
+                          {isRtl ? `اليوم التالي يفتح بعد: ` : `Next day unlocks in: `}
+                        </span>
+                      </div>
+                      <span className="bg-black/60 px-2.5 py-1 rounded-lg border border-amber-400/40 font-mono font-black text-amber-400 text-xs">
+                        {formatTime(checkInRemainingMs)}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="bg-amber-50 border-b border-amber-200/80 px-4 py-2 text-[11px] text-amber-900 font-medium">
+                      {isRtl
+                        ? 'ملاحظة: اليوم 1 و 2 لتثبيت السلسلة، وتبدأ المكافآت المالية من اليوم 3 (1.77 USDT).'
+                        : 'Note: Days 1 & 2 establish streak. Cash rewards unlock starting Day 3 (1.77 USDT).'}
+                    </div>
+                  )}
 
                   {/* 30-Day Grid */}
                   <div className="flex-1 overflow-y-auto p-4 space-y-3">
                     <div className="grid grid-cols-5 gap-2">
                       {DAILY_CHECK_IN_REWARDS.map(item => {
                         const isClaimed = (userState.claimedCheckInDays || []).includes(item.day);
-                        const isCurrentEligible = !hasCheckedInToday && (userState.checkInStreak || 0) + 1 === item.day;
+                        const isCurrentEligible = !isCheckInCooldown && (userState.checkInStreak || 0) + 1 === item.day;
+                        const isNextLocked = isCheckInCooldown && (userState.checkInStreak || 0) + 1 === item.day;
 
                         return (
                           <div
@@ -1480,6 +1495,8 @@
                                 ? 'bg-emerald-50 border border-emerald-300 text-emerald-800'
                                 : isCurrentEligible
                                 ? 'bg-gradient-to-b from-amber-50 to-red-50 border-2 border-red-500 shadow-md ring-2 ring-red-400/30 scale-105 z-10'
+                                : isNextLocked
+                                ? 'bg-amber-50/70 border border-amber-400 text-amber-900 shadow-xs'
                                 : item.day === 30
                                 ? 'bg-amber-100/70 border border-amber-400 text-amber-950 font-bold'
                                 : 'bg-gray-50 border border-gray-200 text-gray-600'
@@ -1493,13 +1510,15 @@
                                 <Icons.Check className="w-5 h-5 text-emerald-600" />
                               ) : isCurrentEligible ? (
                                 <Icons.Gift className="w-5 h-5 text-red-600 animate-bounce" />
+                              ) : isNextLocked ? (
+                                <Icons.Clock className="w-4 h-4 text-amber-600 animate-pulse" />
                               ) : (
                                 <Icons.Clock className="w-4 h-4 text-gray-400" />
                               )}
                             </div>
                             <div className="mt-0.5 leading-tight">
                               {item.reward > 0 ? (
-                                <span className={`text-[11px] font-black block ${isClaimed ? 'text-emerald-700' : isCurrentEligible ? 'text-red-700 font-extrabold' : 'text-gray-700'}`}>
+                                <span className={`text-[11px] font-black block ${isClaimed ? 'text-emerald-700' : isCurrentEligible ? 'text-red-700 font-extrabold' : isNextLocked ? 'text-amber-800 font-bold' : 'text-gray-700'}`}>
                                   +{item.reward}
                                 </span>
                               ) : (
@@ -1512,6 +1531,11 @@
                                 500$
                               </span>
                             )}
+                            {isNextLocked && (
+                              <span className="absolute -top-1.5 bg-amber-600 text-white text-[7px] font-black px-1 rounded-full">
+                                24h
+                              </span>
+                            )}
                           </div>
                         );
                       })}
@@ -1520,7 +1544,7 @@
 
                   {/* Footer Button */}
                   <div className="p-4 bg-gray-50 border-t border-gray-200 flex flex-col gap-2">
-                    {!hasCheckedInToday ? (
+                    {!isCheckInCooldown ? (
                       <button
                         type="button"
                         onClick={handleClaimCheckIn}
@@ -1535,21 +1559,36 @@
                       </button>
                     ) : (
                       <div className="space-y-2">
-                        <div className="w-full py-3 px-4 rounded-2xl bg-emerald-100 border border-emerald-300 text-emerald-900 font-bold text-xs text-center">
-                          {isRtl
-                            ? `تم تسجيل الدخول بنجاح لليوم ${userState.checkInStreak}! عُد غداً لليوم ${(userState.checkInStreak || 0) + 1}`
-                            : `Checked in successfully for Day ${userState.checkInStreak}! Return tomorrow.`}
-                        </div>
                         <button
                           type="button"
-                          onClick={handleSimulateNextDay}
-                          className="w-full py-2 px-3 text-[11px] text-gray-500 hover:text-gray-700 bg-gray-200 rounded-xl font-medium transition cursor-pointer flex items-center justify-center gap-1"
+                          disabled
+                          className="w-full py-3.5 px-4 rounded-2xl bg-gray-200 border border-gray-300 text-gray-500 font-extrabold text-sm flex items-center justify-center gap-2 cursor-not-allowed select-none"
                         >
-                          <Icons.ArrowRight className="w-3 h-3" />
-                          <span>{isRtl ? 'تجربة اليوم التالي فوراً (وضع المعاينة)' : 'Fast-Forward to Next Day'}</span>
+                          <Icons.Clock className="w-4 h-4 text-amber-600" />
+                          <span>
+                            {isRtl
+                              ? `يرجى الانتظار (${formatTime(checkInRemainingMs)}) لليوم ${(userState.checkInStreak || 0) + 1}`
+                              : `Please wait (${formatTime(checkInRemainingMs)}) for Day ${(userState.checkInStreak || 0) + 1}`}
+                          </span>
                         </button>
+                        <div className="text-center text-[11px] text-gray-500 font-medium">
+                          {isRtl
+                            ? `تم استلام مكافأة اليوم ${userState.checkInStreak} بنجاح! يتم تفعيل اليوم التالي بعد 24 ساعة.`
+                            : `Day ${userState.checkInStreak} claimed successfully! Next day unlocks after 24 hours.`}
+                        </div>
                       </div>
                     )}
+
+                    {/* Close/Exit Button */}
+                    <button
+                      id="close-standalone-checkin-footer-btn"
+                      type="button"
+                      onClick={() => setShowDailyCheckIn(false)}
+                      className="w-full py-2.5 px-4 rounded-xl border border-gray-300 hover:border-gray-400 bg-white hover:bg-gray-100 text-gray-700 font-bold text-xs flex items-center justify-center gap-1.5 transition active:scale-98 cursor-pointer shadow-xs"
+                    >
+                      <Icons.X className="w-3.5 h-3.5 text-gray-500" />
+                      <span>{isRtl ? 'إغلاق ومغادرة الجدول' : 'Close Schedule'}</span>
+                    </button>
                   </div>
                 </div>
               </div>

@@ -59,6 +59,7 @@ export interface UserState {
   luckyDrawLastUsedAt: number | null;
   checkInStreak: number;
   lastCheckInDate: string | null;
+  lastCheckInTime: number | null;
   claimedCheckInDays: number[];
   records: TransactionRecord[];
 }

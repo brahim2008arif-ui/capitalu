@@ -12,8 +12,7 @@ import { AuthModal } from './components/AuthModal';
 import { LuckyWheelModal } from './components/LuckyWheelModal';
 import { RecordsModal } from './components/RecordsModal';
 import { WelcomePromoModal } from './components/WelcomePromoModal';
-import { LuckyWheelFloatingBubble } from './components/LuckyWheelFloatingBubble';
-import { DailyCheckInFloatingBubble } from './components/DailyCheckInFloatingBubble';
+import { FloatingActionBubbles } from './components/FloatingActionBubbles';
 import { DailyCheckInModal } from './components/DailyCheckInModal';
 import { DAILY_CHECK_IN_REWARDS } from './data/checkInData';
 import { TabType, Language, UserState, LivePayout, TransactionRecord, PaymentRequest } from './types';
@@ -79,6 +78,7 @@ export default function App() {
           luckyDrawLastUsedAt: parsed.luckyDrawLastUsedAt ?? null,
           checkInStreak: parsed.checkInStreak ?? 0,
           lastCheckInDate: parsed.lastCheckInDate ?? null,
+          lastCheckInTime: parsed.lastCheckInTime ?? (parsed.lastCheckInDate ? Date.now() : null),
           claimedCheckInDays: parsed.claimedCheckInDays ?? [],
         };
       }
@@ -103,6 +103,7 @@ export default function App() {
       luckyDrawLastUsedAt: null,
       checkInStreak: 0,
       lastCheckInDate: null,
+      lastCheckInTime: null,
       claimedCheckInDays: [],
       records: [],
     };
@@ -392,15 +393,22 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const todayDateStr = new Date().toISOString().split('T')[0];
-  const hasCheckedInToday = userState.lastCheckInDate === todayDateStr;
+  const CHECKIN_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+  const isCheckInCooldown = Boolean(
+    userState.lastCheckInTime && Date.now() - userState.lastCheckInTime < CHECKIN_COOLDOWN_MS
+  );
 
   const handleClaimCheckIn = () => {
-    if (userState.lastCheckInDate === todayDateStr) {
-      showToast(language === 'ar' ? 'لقد قمت بتسجيل الدخول لليوم بالفعل!' : 'Already checked in today!');
+    if (userState.lastCheckInTime && Date.now() - userState.lastCheckInTime < CHECKIN_COOLDOWN_MS) {
+      showToast(
+        language === 'ar'
+          ? 'يرجى الانتظار 24 ساعة حتى يفتح اليوم التالي!'
+          : 'Please wait 24 hours until the next day unlocks!'
+      );
       return;
     }
 
+    const now = Date.now();
     const newStreak = (userState.checkInStreak || 0) + 1;
     const rewardObj = DAILY_CHECK_IN_REWARDS.find((r) => r.day === newStreak) || { reward: 0 };
     const rewardAmount = rewardObj.reward;
@@ -418,7 +426,8 @@ export default function App() {
       ...prev,
       balance: Number((prev.balance + rewardAmount).toFixed(2)),
       checkInStreak: newStreak,
-      lastCheckInDate: todayDateStr,
+      lastCheckInDate: new Date().toISOString().split('T')[0],
+      lastCheckInTime: now,
       claimedCheckInDays: [...(prev.claimedCheckInDays || []), newStreak],
       records: rewardAmount > 0 ? [newRecord, ...(prev.records || [])] : (prev.records || []),
     }));
@@ -436,18 +445,6 @@ export default function App() {
           : `Checked in for Day ${newStreak}! Cash rewards start on Day 3.`
       );
     }
-  };
-
-  const handleSimulateNextDay = () => {
-    setUserState((prev) => ({
-      ...prev,
-      lastCheckInDate: null,
-    }));
-    showToast(
-      language === 'ar'
-        ? 'تم فتح اليوم التالي للتجربة السريعة بنجاح!'
-        : 'Fast-forwarded to next day successfully!'
-    );
   };
 
   const handleSignOut = () => {
@@ -602,21 +599,16 @@ export default function App() {
           )}
         </main>
 
-        {/* Lucky Wheel & Daily Check-In Floating Action Bubbles */}
+        {/* Lucky Wheel & Daily Check-In Floating Action Bubbles (Stacked vertically, compact, bottom-right) */}
         {!showLuckyWheel && !showDailyCheckIn && (
-          <>
-            <LuckyWheelFloatingBubble
-              language={language}
-              remainingDraws={userState.luckyDrawRemaining}
-              onOpen={() => setShowLuckyWheel(true)}
-            />
-            <DailyCheckInFloatingBubble
-              language={language}
-              streak={userState.checkInStreak || 0}
-              hasCheckedInToday={hasCheckedInToday}
-              onOpen={() => setShowDailyCheckIn(true)}
-            />
-          </>
+          <FloatingActionBubbles
+            language={language}
+            remainingDraws={userState.luckyDrawRemaining}
+            streak={userState.checkInStreak || 0}
+            hasCheckedInToday={isCheckInCooldown}
+            onOpenLuckyWheel={() => setShowLuckyWheel(true)}
+            onOpenDailyCheckIn={() => setShowDailyCheckIn(true)}
+          />
         )}
 
         {/* Bottom Navigation Bar */}
@@ -676,11 +668,10 @@ export default function App() {
           <DailyCheckInModal
             language={language}
             streak={userState.checkInStreak || 0}
-            hasCheckedInToday={hasCheckedInToday}
+            lastCheckInTime={userState.lastCheckInTime || null}
             claimedDays={userState.claimedCheckInDays || []}
             onClose={() => setShowDailyCheckIn(false)}
             onClaimToday={handleClaimCheckIn}
-            onSimulateNextDay={handleSimulateNextDay}
           />
         )}
 

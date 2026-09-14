@@ -1,56 +1,101 @@
-import React, { useState } from 'react';
-import { X, CalendarCheck, Sparkles, Trophy, CheckCircle2, Lock, Flame, Gift, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, CalendarCheck, Sparkles, Trophy, CheckCircle2, Lock, Flame, Gift, Clock, Timer } from 'lucide-react';
 import { Language } from '../types';
 import { DAILY_CHECK_IN_REWARDS } from '../data/checkInData';
+
+const COOLDOWN_DURATION_MS = 24 * 60 * 60 * 1000; // Exact 24 hours
 
 interface DailyCheckInModalProps {
   language: Language;
   streak: number;
-  hasCheckedInToday: boolean;
+  lastCheckInTime: number | null;
   claimedDays: number[];
   onClose: () => void;
   onClaimToday: () => void;
-  onSimulateNextDay?: () => void;
 }
 
 export const DailyCheckInModal: React.FC<DailyCheckInModalProps> = ({
   language,
   streak,
-  hasCheckedInToday,
+  lastCheckInTime,
   claimedDays,
   onClose,
   onClaimToday,
-  onSimulateNextDay,
 }) => {
   const isAr = language === 'ar';
-  const nextClaimDay = hasCheckedInToday ? streak + 1 : Math.max(1, streak === 0 ? 1 : streak + 1);
-  const currentEligibleDay = hasCheckedInToday ? null : Math.max(1, streak + 1);
 
-  // Get current eligible reward
+  // Calculate live remaining milliseconds of the 24-hour cycle
+  const [timeLeftMs, setTimeLeftMs] = useState<number>(() => {
+    if (!lastCheckInTime) return 0;
+    const elapsed = Date.now() - lastCheckInTime;
+    return Math.max(0, COOLDOWN_DURATION_MS - elapsed);
+  });
+
+  useEffect(() => {
+    if (!lastCheckInTime) {
+      setTimeLeftMs(0);
+      return;
+    }
+
+    const updateTimer = () => {
+      const elapsed = Date.now() - lastCheckInTime;
+      const remaining = Math.max(0, COOLDOWN_DURATION_MS - elapsed);
+      setTimeLeftMs(remaining);
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [lastCheckInTime]);
+
+  const isCooldownActive = timeLeftMs > 0;
+  const nextClaimDay = isCooldownActive ? streak + 1 : Math.max(1, streak === 0 ? 1 : streak + 1);
+  const currentEligibleDay = isCooldownActive ? null : Math.max(1, streak + 1);
+
+  // Get current eligible reward object
   const currentRewardObj = currentEligibleDay
     ? DAILY_CHECK_IN_REWARDS.find((r) => r.day === currentEligibleDay)
     : null;
 
-  const [activeTab, setActiveTab] = useState<'all' | 'milestones'>('all');
+  // Next reward object when locked in cooldown
+  const nextRewardObj = DAILY_CHECK_IN_REWARDS.find((r) => r.day === nextClaimDay);
+
+  // Time components
+  const hours = Math.floor(timeLeftMs / (1000 * 60 * 60));
+  const minutes = Math.floor((timeLeftMs % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((timeLeftMs % (1000 * 60)) / 1000);
+
+  const padZero = (n: number) => n.toString().padStart(2, '0');
+  const formattedCountdown = `${padZero(hours)}:${padZero(minutes)}:${padZero(seconds)}`;
+  const percentElapsed = Math.min(100, Math.max(0, ((COOLDOWN_DURATION_MS - timeLeftMs) / COOLDOWN_DURATION_MS) * 100));
 
   return (
     <div
       id="daily-checkin-modal-backdrop"
-      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto cursor-pointer"
     >
       <div
         id="daily-checkin-modal"
-        className="w-full max-w-md bg-white rounded-3xl overflow-hidden shadow-2xl border border-amber-200/60 flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md bg-white rounded-3xl overflow-hidden shadow-2xl border border-amber-200/60 flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-200 cursor-default"
       >
         {/* Header with Luxury Gradient */}
         <div className="bg-gradient-to-r from-gray-950 via-red-950 to-amber-950 text-white p-4 sm:p-5 relative border-b border-amber-500/20">
+          {/* Prominent Exit Button (X) */}
           <button
+            id="close-checkin-modal-header-btn"
             type="button"
             onClick={onClose}
-            className="absolute top-3.5 left-3.5 rtl:left-auto rtl:right-3.5 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-gray-300 hover:text-white transition cursor-pointer z-10"
-            title={isAr ? 'إغلاق' : 'Close'}
+            className={`absolute top-3.5 ${
+              isAr ? 'left-3.5' : 'right-3.5'
+            } w-9 h-9 rounded-full bg-white/20 hover:bg-red-600 active:scale-90 border border-white/30 text-white flex items-center justify-center transition-all shadow-md cursor-pointer z-20 group`}
+            title={isAr ? 'إغلاق (✕)' : 'Close (✕)'}
+            aria-label="Close"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5 text-white group-hover:rotate-90 transition-transform duration-200" />
           </button>
 
           <div className="flex items-center gap-2 mb-1">
@@ -103,17 +148,60 @@ export const DailyCheckInModal: React.FC<DailyCheckInModalProps> = ({
           </div>
         </div>
 
-        {/* Info banner about rule: 3 days and up */}
-        <div className="bg-amber-50 border-b border-amber-200/80 px-4 py-2 text-[11px] text-amber-900 font-medium flex items-center justify-between">
-          <span className="flex items-center gap-1.5">
-            <Gift className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-            <span>
-              {isAr
-                ? 'ملاحظة: اليوم 1 و 2 لتثبيت السلسلة، وتبدأ المكافآت المالية من اليوم 3 (1.77 USDT).'
-                : 'Note: Days 1 & 2 establish streak. Cash rewards unlock starting Day 3 (1.77 USDT).'}
+        {/* 24-Hour Cooldown Timer Banner (Active when waiting for next day) */}
+        {isCooldownActive ? (
+          <div className="bg-gradient-to-r from-amber-950 via-gray-900 to-red-950 border-b border-amber-500/30 p-3 text-white">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-400 shrink-0">
+                  <Timer className="w-4 h-4 animate-spin-slow" />
+                </div>
+                <div>
+                  <div className="text-[11px] font-bold text-amber-300 flex items-center gap-1">
+                    <Lock className="w-3 h-3" />
+                    <span>
+                      {isAr ? `اليوم ${nextClaimDay} يفتح بعد 24 ساعة:` : `Day ${nextClaimDay} unlocks in 24h:`}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-gray-300">
+                    {isAr
+                      ? `تم إكمال تسجيل اليوم ${streak} بنجاح`
+                      : `Day ${streak} completed successfully`}
+                  </div>
+                </div>
+              </div>
+
+              {/* Digits Display */}
+              <div className="bg-black/60 px-3 py-1.5 rounded-xl border border-amber-500/40 font-mono font-black text-amber-400 text-sm tracking-wider shadow-inner">
+                {formattedCountdown}
+              </div>
+            </div>
+
+            {/* Visual Countdown Progress Bar */}
+            <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-amber-500 via-rose-500 to-red-500 rounded-full transition-all duration-1000"
+                style={{ width: `${percentElapsed}%` }}
+              />
+            </div>
+            <div className="flex justify-between items-center text-[9px] text-gray-400 mt-1">
+              <span>{isAr ? 'بدء العد التنازلي (24 ساعة)' : 'Started 24h timer'}</span>
+              <span>{Math.round(percentElapsed)}%</span>
+            </div>
+          </div>
+        ) : (
+          /* Notice banner when ready to claim */
+          <div className="bg-amber-50 border-b border-amber-200/80 px-4 py-2 text-[11px] text-amber-900 font-medium flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <Gift className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span>
+                {isAr
+                  ? 'ملاحظة: اليوم 1 و 2 لتثبيت السلسلة، وتبدأ المكافآت المالية من اليوم 3 (1.77 USDT).'
+                  : 'Note: Days 1 & 2 establish streak. Cash rewards unlock starting Day 3 (1.77 USDT).'}
+              </span>
             </span>
-          </span>
-        </div>
+          </div>
+        )}
 
         {/* Schedule Grid Content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -130,8 +218,8 @@ export const DailyCheckInModal: React.FC<DailyCheckInModalProps> = ({
           <div className="grid grid-cols-5 gap-2">
             {DAILY_CHECK_IN_REWARDS.map((item) => {
               const isClaimed = claimedDays.includes(item.day);
-              const isToday = currentEligibleDay === item.day;
-              const isLocked = !isClaimed && !isToday;
+              const isReadyToday = currentEligibleDay === item.day;
+              const isNextLocked = isCooldownActive && item.day === nextClaimDay;
 
               return (
                 <div
@@ -139,8 +227,10 @@ export const DailyCheckInModal: React.FC<DailyCheckInModalProps> = ({
                   className={`relative rounded-2xl p-2 flex flex-col items-center justify-between text-center transition-all ${
                     isClaimed
                       ? 'bg-emerald-50 border border-emerald-300 text-emerald-800'
-                      : isToday
+                      : isReadyToday
                       ? 'bg-gradient-to-b from-amber-50 to-red-50 border-2 border-red-500 shadow-md ring-2 ring-red-400/30 scale-105 z-10'
+                      : isNextLocked
+                      ? 'bg-gradient-to-b from-amber-50/60 to-yellow-50/60 border border-amber-400 text-amber-900 shadow-xs'
                       : item.day === 30
                       ? 'bg-gradient-to-b from-amber-100 to-amber-50 border border-amber-400 text-amber-950 font-bold'
                       : 'bg-gray-50 border border-gray-200 text-gray-600'
@@ -155,8 +245,10 @@ export const DailyCheckInModal: React.FC<DailyCheckInModalProps> = ({
                   <div className="my-1">
                     {isClaimed ? (
                       <CheckCircle2 className="w-5 h-5 text-emerald-600 fill-emerald-100" />
-                    ) : isToday ? (
+                    ) : isReadyToday ? (
                       <Gift className="w-5 h-5 text-red-600 animate-bounce" />
+                    ) : isNextLocked ? (
+                      <Clock className="w-4 h-4 text-amber-600 animate-pulse" />
                     ) : item.day === 30 ? (
                       <Trophy className="w-5 h-5 text-amber-600" />
                     ) : item.day >= 3 ? (
@@ -173,8 +265,10 @@ export const DailyCheckInModal: React.FC<DailyCheckInModalProps> = ({
                         className={`text-[11px] font-black block ${
                           isClaimed
                             ? 'text-emerald-700'
-                            : isToday
+                            : isReadyToday
                             ? 'text-red-700 font-extrabold'
+                            : isNextLocked
+                            ? 'text-amber-800 font-bold'
                             : item.day === 30
                             ? 'text-amber-700 font-black'
                             : 'text-gray-700'
@@ -190,7 +284,7 @@ export const DailyCheckInModal: React.FC<DailyCheckInModalProps> = ({
                     <span className="text-[8px] text-gray-400 font-mono block">USDT</span>
                   </div>
 
-                  {/* Highlight tag for Day 30 or Day 3/5 */}
+                  {/* Highlight tag */}
                   {item.day === 30 && (
                     <span className="absolute -top-1.5 bg-gradient-to-r from-amber-500 to-red-600 text-white text-[7px] font-black px-1 rounded-full uppercase">
                       500$
@@ -199,6 +293,11 @@ export const DailyCheckInModal: React.FC<DailyCheckInModalProps> = ({
                   {item.day === 3 && (
                     <span className="absolute -top-1.5 bg-red-600 text-white text-[7px] font-black px-1 rounded-full">
                       {isAr ? 'بداية' : 'Start'}
+                    </span>
+                  )}
+                  {isNextLocked && (
+                    <span className="absolute -top-1.5 bg-amber-600 text-white text-[7px] font-black px-1 rounded-full">
+                      24h
                     </span>
                   )}
                 </div>
@@ -245,7 +344,7 @@ export const DailyCheckInModal: React.FC<DailyCheckInModalProps> = ({
 
         {/* Footer Action Bar */}
         <div className="p-4 bg-gray-50 border-t border-gray-200 flex flex-col gap-2">
-          {!hasCheckedInToday && currentRewardObj ? (
+          {!isCooldownActive && currentRewardObj ? (
             <button
               id="claim-checkin-btn"
               type="button"
@@ -261,30 +360,39 @@ export const DailyCheckInModal: React.FC<DailyCheckInModalProps> = ({
             </button>
           ) : (
             <div className="space-y-2">
-              <div className="w-full py-3 px-4 rounded-2xl bg-emerald-100/80 border border-emerald-300 text-emerald-900 font-bold text-xs flex items-center justify-center gap-2 text-center">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              {/* Waiting button with lock and 24h countdown */}
+              <button
+                id="cooldown-checkin-btn"
+                type="button"
+                disabled
+                className="w-full py-3.5 px-4 rounded-2xl bg-gray-200 border border-gray-300 text-gray-500 font-extrabold text-sm flex items-center justify-center gap-2 cursor-not-allowed select-none"
+              >
+                <Lock className="w-4 h-4 text-amber-600" />
                 <span>
                   {isAr
-                    ? `تم تسجيل الدخول بنجاح لليوم ${streak}! عُد غداً لليوم ${nextClaimDay}`
-                    : `Checked in successfully for Day ${streak}! Return tomorrow for Day ${nextClaimDay}`}
+                    ? `يرجى الانتظار (${formattedCountdown}) لليوم ${nextClaimDay}`
+                    : `Please wait (${formattedCountdown}) for Day ${nextClaimDay}`}
                 </span>
-              </div>
+              </button>
 
-              {/* Developer / Evaluator convenience to simulate next day without waiting 24 hours */}
-              {onSimulateNextDay && (
-                <button
-                  type="button"
-                  onClick={onSimulateNextDay}
-                  className="w-full py-2 px-3 text-[11px] text-gray-500 hover:text-gray-700 bg-gray-200/70 hover:bg-gray-200 rounded-xl font-medium transition cursor-pointer flex items-center justify-center gap-1"
-                >
-                  <ArrowRight className="w-3 h-3" />
-                  <span>
-                    {isAr ? 'تجربة اليوم التالي فوراً (وضع المعاينة)' : 'Fast-Forward to Next Day (Preview)'}
-                  </span>
-                </button>
-              )}
+              <div className="text-center text-[11px] text-gray-500 font-medium">
+                {isAr
+                  ? `تم استلام مكافأة اليوم ${streak} بنجاح! يتم تفعيل اليوم التالي بعد 24 ساعة.`
+                  : `Day ${streak} claimed successfully! Next day unlocks after 24 hours.`}
+              </div>
             </div>
           )}
+
+          {/* Close/Exit Button */}
+          <button
+            id="close-checkin-modal-footer-btn"
+            type="button"
+            onClick={onClose}
+            className="w-full py-2.5 px-4 rounded-xl border border-gray-300 hover:border-gray-400 bg-white hover:bg-gray-100 text-gray-700 font-bold text-xs flex items-center justify-center gap-1.5 transition active:scale-98 cursor-pointer shadow-xs"
+          >
+            <X className="w-3.5 h-3.5 text-gray-500" />
+            <span>{isAr ? 'إغلاق ومغادرة الجدول' : 'Close Schedule'}</span>
+          </button>
         </div>
       </div>
     </div>
