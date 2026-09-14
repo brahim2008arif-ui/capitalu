@@ -302,25 +302,37 @@
         setTimeout(() => setToast(prev => ({ ...prev, visible: false })), 3500);
       }, []);
 
-      // User State with local persistence
+      // User State with local persistence - defaults to unauthenticated so users register/login individually
       const [userState, setUserState] = useState(() => {
         try {
           const saved = localStorage.getItem('clc_state');
-          if (saved) return JSON.parse(saved);
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            // Clean up any legacy demo users
+            if (
+              parsed.userEmail === 'vip_investor@luxurycars.vip' ||
+              parsed.userEmail === 'demo_user@luxurycars.vip' ||
+              parsed.userId === '7492105'
+            ) {
+              localStorage.removeItem('clc_state');
+            } else if (parsed.isAuthenticated && parsed.userEmail) {
+              return parsed;
+            }
+          }
         } catch(e) {}
         return {
-          isAuthenticated: true,
-          userId: '7492105',
-          userEmail: 'vip_investor@luxurycars.vip',
+          isAuthenticated: false,
+          userId: '',
+          userEmail: '',
           balance: 0.0,
           rechargeAmount: 0.0,
           vipLevel: 'VIP0',
           taskCompletedAt: null,
           maxDailyTasks: 1,
-          teamSize: 4,
+          teamSize: 0,
           teamRecharge: 0.0,
           teamWithdraw: 0.0,
-          inviteCode: 'CLC749210',
+          inviteCode: '',
           luckyDrawRemaining: 1,
           luckyDrawLastUsedAt: null,
           checkInStreak: 0,
@@ -330,6 +342,65 @@
           records: [],
         };
       });
+
+      // Auth view state
+      const [authMode, setAuthMode] = useState('signup');
+      const [authMethod, setAuthMethod] = useState('email');
+      const [authIdentifier, setAuthIdentifier] = useState('');
+      const [authPassword, setAuthPassword] = useState('');
+      const [authConfirmPassword, setAuthConfirmPassword] = useState('');
+      const [authInviteCode, setAuthInviteCode] = useState('777777');
+      const [showAuthPass, setShowAuthPass] = useState(false);
+
+      const handleStandaloneAuth = () => {
+        const id = authIdentifier.trim();
+        const pass = authPassword.trim();
+        if (!id) {
+          showToastMsg(isRtl ? 'يرجى إدخال البريد الإلكتروني أو الهاتف' : 'Please enter email or phone');
+          return;
+        }
+        if (!pass) {
+          showToastMsg(isRtl ? 'يرجى إدخال كلمة المرور' : 'Please enter password');
+          return;
+        }
+        if (authMode === 'signup' && pass !== authConfirmPassword.trim()) {
+          showToastMsg(isRtl ? 'كلمتا المرور غير متطابقتين' : 'Passwords do not match');
+          return;
+        }
+
+        const generatedId = String(Math.floor(1000000 + Math.random() * 9000000));
+        const generatedInvite = 'CLC' + Math.floor(100000 + Math.random() * 900000);
+
+        setUserState({
+          isAuthenticated: true,
+          userId: generatedId,
+          userEmail: id,
+          balance: 0.0,
+          rechargeAmount: 0.0,
+          vipLevel: 'VIP0',
+          taskCompletedAt: null,
+          maxDailyTasks: 1,
+          teamSize: 0,
+          teamRecharge: 0.0,
+          teamWithdraw: 0.0,
+          inviteCode: generatedInvite,
+          luckyDrawRemaining: 1,
+          luckyDrawLastUsedAt: null,
+          checkInStreak: 0,
+          lastCheckInDate: null,
+          lastCheckInTime: null,
+          claimedCheckInDays: [],
+          records: [],
+        });
+        showToastMsg(isRtl ? `مرحباً بك! تم تسجيل الحساب بنجاح (${id})` : `Welcome! Account registered successfully (${id})`);
+        setCurrentTab('home');
+      };
+
+      const handleStandaloneSignOut = () => {
+        setUserState(prev => ({ ...prev, isAuthenticated: false }));
+        localStorage.removeItem('clc_state');
+        showToastMsg(isRtl ? 'تم تسجيل الخروج' : 'Signed out');
+      };
 
       useEffect(() => {
         try {
@@ -523,6 +594,155 @@
         showToastMsg(isRtl ? `تم استلام تفاصيل الحوالة! فترة التأكيد 24 ساعة لتفعيل ${payment.level}` : `Payment submitted! 24h verification to activate ${payment.level}`);
         setShowPayment(null);
       };
+
+      if (!userState.isAuthenticated) {
+        return (
+          <div className="font-sans antialiased text-gray-800 flex justify-center min-h-screen bg-gray-100 p-4 select-none">
+            <div className="w-full max-w-md my-auto">
+              {/* Language Switch */}
+              <div className="flex justify-end mb-3">
+                <button
+                  type="button"
+                  onClick={() => setLanguage(l => l === 'ar' ? 'en' : 'ar')}
+                  className="bg-white hover:bg-gray-50 text-gray-700 text-xs px-3 py-1.5 rounded-full border border-gray-200 shadow-xs flex items-center gap-1.5 transition cursor-pointer font-bold"
+                >
+                  <Icons.Globe className="w-3.5 h-3.5 text-red-600" />
+                  <span>{language === 'ar' ? 'English' : 'العربية'}</span>
+                </button>
+              </div>
+
+              {/* Logo & Header */}
+              <div className="text-center mb-6">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-3xl bg-red-600 text-white shadow-xl">
+                  <Icons.Car className="w-8 h-8" />
+                </div>
+                <h1 className="font-black text-gray-900 text-xl mt-3.5 tracking-tight">{t.appName}</h1>
+                <p className="text-xs text-gray-500 mt-1 font-medium">VIP Luxury Fleet</p>
+              </div>
+
+              {/* Auth Card */}
+              <div className="bg-white rounded-3xl p-6 shadow-md border border-gray-100">
+                {/* Tabs */}
+                <div className="flex bg-gray-100 p-1 rounded-2xl mb-5">
+                  <button
+                    type="button"
+                    onClick={() => setAuthMode('signin')}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                      authMode === 'signin' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                    }`}
+                  >
+                    <Icons.LogIn className="w-3.5 h-3.5 text-red-600" />
+                    <span>{t.signIn}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAuthMode('signup')}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                      authMode === 'signup' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                    }`}
+                  >
+                    <Icons.UserCheck className="w-3.5 h-3.5 text-red-600" />
+                    <span>{t.signUp}</span>
+                  </button>
+                </div>
+
+                <div className="space-y-3.5">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                      {isRtl ? 'البريد الإلكتروني أو رقم الهاتف' : 'Email Address or Phone'}
+                    </label>
+                    <input
+                      type="text"
+                      value={authIdentifier}
+                      onChange={(e) => setAuthIdentifier(e.target.value)}
+                      placeholder={isRtl ? 'مثال: name@gmail.com' : 'e.g. name@gmail.com'}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-2xl py-3 px-3.5 text-xs text-gray-900 focus:bg-white focus:border-red-500 focus:outline-none transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                      {t.password}
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showAuthPass ? 'text' : 'password'}
+                        value={authPassword}
+                        onChange={(e) => setAuthPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full bg-gray-50 border border-gray-200 rounded-2xl py-3 px-3.5 text-xs text-gray-900 focus:bg-white focus:border-red-500 focus:outline-none transition"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowAuthPass(!showAuthPass)}
+                        className="absolute top-1/2 -translate-y-1/2 ltr:right-3.5 rtl:left-3.5 text-gray-400 hover:text-gray-600 cursor-pointer"
+                      >
+                        {showAuthPass ? <Icons.EyeOff className="w-4 h-4" /> : <Icons.Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {authMode === 'signup' && (
+                    <>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                          {t.confirmPassword}
+                        </label>
+                        <input
+                          type="password"
+                          value={authConfirmPassword}
+                          onChange={(e) => setAuthConfirmPassword(e.target.value)}
+                          placeholder="••••••••"
+                          className="w-full bg-gray-50 border border-gray-200 rounded-2xl py-3 px-3.5 text-xs text-gray-900 focus:bg-white focus:border-red-500 focus:outline-none transition"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                          {t.invitationCode}
+                        </label>
+                        <input
+                          type="text"
+                          value={authInviteCode}
+                          onChange={(e) => setAuthInviteCode(e.target.value)}
+                          className="w-full bg-gray-50 border border-gray-200 rounded-2xl py-3 px-3.5 text-xs text-gray-900 focus:bg-white focus:border-red-500 focus:outline-none font-mono"
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div className="mt-5 space-y-2.5">
+                  <button
+                    type="button"
+                    onClick={handleStandaloneAuth}
+                    className="w-full bg-red-600 hover:bg-red-700 text-white rounded-2xl py-3.5 text-xs font-bold shadow-md transition cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <span>{authMode === 'signin' ? t.signIn : t.signUp}</span>
+                  </button>
+
+                  <div className="pt-2 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setAuthMode(m => m === 'signin' ? 'signup' : 'signin')}
+                      className="text-xs text-gray-500 hover:text-red-600 transition cursor-pointer"
+                    >
+                      {authMode === 'signin'
+                        ? (isRtl ? 'ليس لديك حساب؟ سجّل حساباً جديداً الآن' : "Don't have an account? Sign up here")
+                        : (isRtl ? 'لديك حساب بالفعل؟ سجّل دخولك من هنا' : 'Already registered? Sign in here')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {toast.visible && (
+                <div className="fixed top-5 left-1/2 -translate-x-1/2 bg-gray-900/95 text-white px-5 py-3 rounded-2xl shadow-2xl text-xs z-50 font-bold border border-white/10 animate-bounce">
+                  {toast.text}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      }
 
       return (
         <div className="font-sans antialiased text-gray-800 flex justify-center min-h-screen bg-gray-100 select-none">
@@ -1155,6 +1375,17 @@
                       ))}
                     </div>
                   </div>
+
+                  {/* Sign Out Button */}
+                  <button
+                    id="standalone-sign-out-btn"
+                    type="button"
+                    onClick={handleStandaloneSignOut}
+                    className="w-full py-3 px-4 rounded-2xl bg-gray-200/80 hover:bg-red-50 text-gray-700 hover:text-red-600 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer"
+                  >
+                    <Icons.LogOut className="w-4 h-4" />
+                    <span>{t.signOut}</span>
+                  </button>
                 </div>
               )}
             </main>

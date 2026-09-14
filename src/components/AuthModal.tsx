@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Car, Eye, EyeOff, UserCheck, LogIn, UserPlus } from 'lucide-react';
+import { Car, Eye, EyeOff, UserCheck, LogIn, UserPlus, Globe } from 'lucide-react';
 import { Language, UserState } from '../types';
 import { translations } from '../data/translations';
 import {
@@ -11,19 +11,28 @@ import {
 
 interface AuthModalProps {
   language: Language;
+  onToggleLanguage?: () => void;
   onLoginSuccess: (identifier: string, method: 'email' | 'phone', restoredState?: UserState) => void;
   onShowToast: (msg: string) => void;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   language,
+  onToggleLanguage,
   onLoginSuccess,
   onShowToast,
 }) => {
   const t = translations[language];
 
-  // Mode: 'signin' or 'signup'
-  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+  // Mode: 'signin' or 'signup' - Default to 'signup' if no accounts are registered yet
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>(() => {
+    try {
+      const users = getRegisteredUsers();
+      return users.length > 0 ? 'signin' : 'signup';
+    } catch {
+      return 'signup';
+    }
+  });
   const [authMethod, setAuthMethod] = useState<'email' | 'phone'>('email');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -168,6 +177,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gray-100">
       <div className="w-full max-w-md">
+        {/* Language switch button */}
+        {onToggleLanguage && (
+          <div className="flex justify-end mb-3">
+            <button
+              id="auth-lang-toggle-btn"
+              type="button"
+              onClick={onToggleLanguage}
+              className="bg-white hover:bg-gray-50 text-gray-700 text-xs px-3 py-1.5 rounded-full border border-gray-200 shadow-xs flex items-center gap-1.5 transition cursor-pointer font-bold"
+            >
+              <Globe className="w-3.5 h-3.5 text-red-600" />
+              <span>{language === 'ar' ? 'English' : 'العربية'}</span>
+            </button>
+          </div>
+        )}
+
         {/* App Logo & Brand Header */}
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-3xl bg-red-600 text-white shadow-xl">

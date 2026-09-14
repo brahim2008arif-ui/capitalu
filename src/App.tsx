@@ -71,34 +71,44 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        return {
-          ...parsed,
-          balance: parsed.balance ?? 0.0,
-          rechargeAmount: parsed.rechargeAmount ?? 0.0,
-          luckyDrawLastUsedAt: parsed.luckyDrawLastUsedAt ?? null,
-          checkInStreak: parsed.checkInStreak ?? 0,
-          lastCheckInDate: parsed.lastCheckInDate ?? null,
-          lastCheckInTime: parsed.lastCheckInTime ?? (parsed.lastCheckInDate ? Date.now() : null),
-          claimedCheckInDays: parsed.claimedCheckInDays ?? [],
-        };
+        // Clean out any legacy demo_user account
+        if (
+          parsed.currentUser === 'demo_user@luxurycars.vip' ||
+          parsed.userEmail === 'demo_user@luxurycars.vip' ||
+          parsed.userId === '7492105'
+        ) {
+          localStorage.removeItem(STORAGE_KEY);
+        } else if (parsed.isAuthenticated && parsed.currentUser) {
+          return {
+            ...parsed,
+            balance: parsed.balance ?? 0.0,
+            rechargeAmount: parsed.rechargeAmount ?? 0.0,
+            luckyDrawLastUsedAt: parsed.luckyDrawLastUsedAt ?? null,
+            checkInStreak: parsed.checkInStreak ?? 0,
+            lastCheckInDate: parsed.lastCheckInDate ?? null,
+            lastCheckInTime: parsed.lastCheckInTime ?? (parsed.lastCheckInDate ? Date.now() : null),
+            claimedCheckInDays: parsed.claimedCheckInDays ?? [],
+          };
+        }
       }
     } catch {}
 
+    // Default: Not authenticated, requiring login / registration screen first
     return {
-      isAuthenticated: true,
-      currentUser: 'demo_user@luxurycars.vip',
-      userId: '7492105',
-      userEmail: 'demo_user@luxurycars.vip',
+      isAuthenticated: false,
+      currentUser: '',
+      userId: '',
+      userEmail: '',
       authMethod: 'email',
       balance: 0.0,
       rechargeAmount: 0.0,
       vipLevel: 'VIP0', // Starts at VIP0
       taskCompletedAt: null,
       maxDailyTasks: 1,
-      teamSize: 4,
+      teamSize: 0,
       teamRecharge: 0.0,
       teamWithdraw: 0.0,
-      inviteCode: 'CLC749210',
+      inviteCode: '',
       luckyDrawRemaining: 1,
       luckyDrawLastUsedAt: null,
       checkInStreak: 0,
@@ -112,9 +122,11 @@ export default function App() {
   // Save user state to localStorage and user database
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(userState));
-      if (userState.currentUser) {
+      if (userState.isAuthenticated && userState.currentUser) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(userState));
         updateUserStateInStorage(userState.currentUser, userState);
+      } else {
+        localStorage.removeItem(STORAGE_KEY);
       }
     } catch {}
   }, [userState]);
@@ -487,6 +499,7 @@ export default function App() {
       <div className="font-sans antialiased text-gray-800 flex justify-center min-h-screen bg-gray-100">
         <AuthModal
           language={language}
+          onToggleLanguage={handleToggleLanguage}
           onLoginSuccess={handleLoginSuccess}
           onShowToast={showToast}
         />

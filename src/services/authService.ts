@@ -22,49 +22,22 @@ export function getRegisteredUsers(): RegisteredUser[] {
     const raw = localStorage.getItem(REGISTERED_USERS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+      if (Array.isArray(parsed)) {
+        // Filter out any obsolete demo_user accounts
+        const filtered = parsed.filter(
+          (u) => u && u.identifier && u.identifier.toLowerCase() !== 'demo_user@luxurycars.vip'
+        );
+        if (filtered.length !== parsed.length) {
+          localStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify(filtered));
+        }
+        return filtered;
       }
     }
   } catch (err) {
     console.error('Failed to read registered users', err);
   }
 
-  // Initial seed user if none exists
-  const defaultUser: RegisteredUser = {
-    identifier: 'demo_user@luxurycars.vip',
-    method: 'email',
-    password: '123456',
-    createdAt: Date.now(),
-    userState: {
-      isAuthenticated: true,
-      currentUser: 'demo_user@luxurycars.vip',
-      userId: '7492105',
-      userEmail: 'demo_user@luxurycars.vip',
-      authMethod: 'email',
-      balance: 0.0,
-      rechargeAmount: 0.0,
-      vipLevel: 'VIP0',
-      taskCompletedAt: null,
-      maxDailyTasks: 1,
-      teamSize: 4,
-      teamRecharge: 0.0,
-      teamWithdraw: 0.0,
-      inviteCode: 'CLC749210',
-      luckyDrawRemaining: 1,
-      luckyDrawLastUsedAt: null,
-      checkInStreak: 0,
-      lastCheckInDate: null,
-      lastCheckInTime: null,
-      claimedCheckInDays: [],
-      records: [],
-    },
-  };
-
-  try {
-    localStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify([defaultUser]));
-  } catch {}
-  return [defaultUser];
+  return [];
 }
 
 export function saveRegisteredUsers(users: RegisteredUser[]): void {
