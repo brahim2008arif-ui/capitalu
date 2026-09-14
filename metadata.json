@@ -1,0 +1,6 @@
+{
+  "name": "Capital Luxury Cars",
+  "description": "Luxury sports car fleet leasing platform with VIP tiers, daily tasks, lucky wheel, and crypto withdrawals.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
