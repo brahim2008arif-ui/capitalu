@@ -57,5 +57,8 @@ export interface UserState {
   inviteCode: string;
   luckyDrawRemaining: number;
   luckyDrawLastUsedAt: number | null;
+  checkInStreak: number;
+  lastCheckInDate: string | null;
+  claimedCheckInDays: number[];
   records: TransactionRecord[];
 }

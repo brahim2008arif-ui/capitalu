@@ -53,6 +53,9 @@ export function getRegisteredUsers(): RegisteredUser[] {
       inviteCode: 'CLC749210',
       luckyDrawRemaining: 1,
       luckyDrawLastUsedAt: null,
+      checkInStreak: 0,
+      lastCheckInDate: null,
+      claimedCheckInDays: [],
       records: [],
     },
   };
@@ -118,6 +121,9 @@ export function registerNewUser(
       inviteCode: generatedInvite,
       luckyDrawRemaining: 1,
       luckyDrawLastUsedAt: null,
+      checkInStreak: 0,
+      lastCheckInDate: null,
+      claimedCheckInDays: [],
       records: [],
     },
   };

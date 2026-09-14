@@ -13,6 +13,9 @@ import { LuckyWheelModal } from './components/LuckyWheelModal';
 import { RecordsModal } from './components/RecordsModal';
 import { WelcomePromoModal } from './components/WelcomePromoModal';
 import { LuckyWheelFloatingBubble } from './components/LuckyWheelFloatingBubble';
+import { DailyCheckInFloatingBubble } from './components/DailyCheckInFloatingBubble';
+import { DailyCheckInModal } from './components/DailyCheckInModal';
+import { DAILY_CHECK_IN_REWARDS } from './data/checkInData';
 import { TabType, Language, UserState, LivePayout, TransactionRecord, PaymentRequest } from './types';
 import { INITIAL_PAYOUTS, MIN_WITHDRAWAL_AMOUNT } from './data/mockData';
 import { Clock } from 'lucide-react';
@@ -41,6 +44,7 @@ export default function App() {
   const [showWithdrawal, setShowWithdrawal] = useState<boolean>(false);
   const [pendingPayment, setPendingPayment] = useState<PaymentRequest | null>(null);
   const [showLuckyWheel, setShowLuckyWheel] = useState<boolean>(false);
+  const [showDailyCheckIn, setShowDailyCheckIn] = useState<boolean>(false);
   const [showWelcomePromo, setShowWelcomePromo] = useState<boolean>(true);
   const [showRecords, setShowRecords] = useState<boolean>(false);
 
@@ -73,6 +77,9 @@ export default function App() {
           balance: parsed.balance ?? 0.0,
           rechargeAmount: parsed.rechargeAmount ?? 0.0,
           luckyDrawLastUsedAt: parsed.luckyDrawLastUsedAt ?? null,
+          checkInStreak: parsed.checkInStreak ?? 0,
+          lastCheckInDate: parsed.lastCheckInDate ?? null,
+          claimedCheckInDays: parsed.claimedCheckInDays ?? [],
         };
       }
     } catch {}
@@ -94,6 +101,9 @@ export default function App() {
       inviteCode: 'CLC749210',
       luckyDrawRemaining: 1,
       luckyDrawLastUsedAt: null,
+      checkInStreak: 0,
+      lastCheckInDate: null,
+      claimedCheckInDays: [],
       records: [],
     };
   });
@@ -382,6 +392,64 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const todayDateStr = new Date().toISOString().split('T')[0];
+  const hasCheckedInToday = userState.lastCheckInDate === todayDateStr;
+
+  const handleClaimCheckIn = () => {
+    if (userState.lastCheckInDate === todayDateStr) {
+      showToast(language === 'ar' ? 'لقد قمت بتسجيل الدخول لليوم بالفعل!' : 'Already checked in today!');
+      return;
+    }
+
+    const newStreak = (userState.checkInStreak || 0) + 1;
+    const rewardObj = DAILY_CHECK_IN_REWARDS.find((r) => r.day === newStreak) || { reward: 0 };
+    const rewardAmount = rewardObj.reward;
+
+    const newRecord: TransactionRecord = {
+      id: 'CHK' + Date.now().toString().slice(-6),
+      type: language === 'ar' ? `مكافأة تسجيل يومي (اليوم ${newStreak})` : `Daily Check-In (Day ${newStreak})`,
+      amount: rewardAmount,
+      date: new Date().toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US'),
+      status: 'Success',
+      note: language === 'ar' ? 'تمت إضافة المكافأة إلى الرصيد مباشرة' : 'Credited directly to account balance',
+    };
+
+    setUserState((prev) => ({
+      ...prev,
+      balance: Number((prev.balance + rewardAmount).toFixed(2)),
+      checkInStreak: newStreak,
+      lastCheckInDate: todayDateStr,
+      claimedCheckInDays: [...(prev.claimedCheckInDays || []), newStreak],
+      records: rewardAmount > 0 ? [newRecord, ...(prev.records || [])] : (prev.records || []),
+    }));
+
+    if (rewardAmount > 0) {
+      showToast(
+        language === 'ar'
+          ? `تهانينا! حصلت على +${rewardAmount} USDT لتسجيل اليوم ${newStreak}!`
+          : `Congratulations! Received +${rewardAmount} USDT for Day ${newStreak}!`
+      );
+    } else {
+      showToast(
+        language === 'ar'
+          ? `تم تسجيل الحضور بنجاح لليوم ${newStreak}! تبدأ المكافآت من اليوم 3.`
+          : `Checked in for Day ${newStreak}! Cash rewards start on Day 3.`
+      );
+    }
+  };
+
+  const handleSimulateNextDay = () => {
+    setUserState((prev) => ({
+      ...prev,
+      lastCheckInDate: null,
+    }));
+    showToast(
+      language === 'ar'
+        ? 'تم فتح اليوم التالي للتجربة السريعة بنجاح!'
+        : 'Fast-forwarded to next day successfully!'
+    );
+  };
+
   const handleSignOut = () => {
     setUserState((prev) => ({
       ...prev,
@@ -534,13 +602,21 @@ export default function App() {
           )}
         </main>
 
-        {/* Lucky Wheel Floating Action Bubble */}
-        {!showLuckyWheel && (
-          <LuckyWheelFloatingBubble
-            language={language}
-            remainingDraws={userState.luckyDrawRemaining}
-            onOpen={() => setShowLuckyWheel(true)}
-          />
+        {/* Lucky Wheel & Daily Check-In Floating Action Bubbles */}
+        {!showLuckyWheel && !showDailyCheckIn && (
+          <>
+            <LuckyWheelFloatingBubble
+              language={language}
+              remainingDraws={userState.luckyDrawRemaining}
+              onOpen={() => setShowLuckyWheel(true)}
+            />
+            <DailyCheckInFloatingBubble
+              language={language}
+              streak={userState.checkInStreak || 0}
+              hasCheckedInToday={hasCheckedInToday}
+              onOpen={() => setShowDailyCheckIn(true)}
+            />
+          </>
         )}
 
         {/* Bottom Navigation Bar */}
@@ -592,6 +668,19 @@ export default function App() {
             records={userState.records}
             language={language}
             onClose={() => setShowRecords(false)}
+          />
+        )}
+
+        {/* Daily Check-In 30-Day Rewards Modal */}
+        {showDailyCheckIn && (
+          <DailyCheckInModal
+            language={language}
+            streak={userState.checkInStreak || 0}
+            hasCheckedInToday={hasCheckedInToday}
+            claimedDays={userState.claimedCheckInDays || []}
+            onClose={() => setShowDailyCheckIn(false)}
+            onClaimToday={handleClaimCheckIn}
+            onSimulateNextDay={handleSimulateNextDay}
           />
         )}
 

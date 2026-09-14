@@ -249,6 +249,39 @@
       }
     };
 
+    const DAILY_CHECK_IN_REWARDS = [
+      { day: 1, reward: 0.00 },
+      { day: 2, reward: 0.00 },
+      { day: 3, reward: 1.77 },
+      { day: 4, reward: 3.99 },
+      { day: 5, reward: 6.44 },
+      { day: 6, reward: 12.88 },
+      { day: 7, reward: 18.50 },
+      { day: 8, reward: 25.00 },
+      { day: 9, reward: 34.00 },
+      { day: 10, reward: 45.00 },
+      { day: 11, reward: 58.00 },
+      { day: 12, reward: 72.00 },
+      { day: 13, reward: 88.00 },
+      { day: 14, reward: 105.00 },
+      { day: 15, reward: 125.00 },
+      { day: 16, reward: 148.00 },
+      { day: 17, reward: 172.00 },
+      { day: 18, reward: 198.00 },
+      { day: 19, reward: 226.00 },
+      { day: 20, reward: 256.00 },
+      { day: 21, reward: 288.00 },
+      { day: 22, reward: 322.00 },
+      { day: 23, reward: 358.00 },
+      { day: 24, reward: 395.00 },
+      { day: 25, reward: 430.00 },
+      { day: 26, reward: 455.00 },
+      { day: 27, reward: 472.00 },
+      { day: 28, reward: 485.00 },
+      { day: 29, reward: 494.00 },
+      { day: 30, reward: 500.00 },
+    ];
+
     // --- Main Single-File App Component ---
     function App() {
       const [language, setLanguage] = useState(() => localStorage.getItem('clc_lang') || 'ar');
@@ -256,6 +289,7 @@
       const [showWithdrawal, setShowWithdrawal] = useState(false);
       const [showPayment, setShowPayment] = useState(null); // { level, cost, type }
       const [showLuckyWheel, setShowLuckyWheel] = useState(false);
+      const [showDailyCheckIn, setShowDailyCheckIn] = useState(false);
       const [showWelcomePromo, setShowWelcomePromo] = useState(true);
       const [showRecords, setShowRecords] = useState(false);
       const [toast, setToast] = useState({ text: '', visible: false });
@@ -289,6 +323,9 @@
           inviteCode: 'CLC749210',
           luckyDrawRemaining: 1,
           luckyDrawLastUsedAt: null,
+          checkInStreak: 0,
+          lastCheckInDate: null,
+          claimedCheckInDays: [],
           records: [],
         };
       });
@@ -366,6 +403,60 @@
           records: [newRecord, ...prev.records]
         }));
         showToastMsg(isRtl ? 'تم استلام أرباح المهمة +1.50 USDT!' : 'Claimed +1.50 USDT profit!');
+      };
+
+      const todayDateStr = new Date().toISOString().split('T')[0];
+      const hasCheckedInToday = userState.lastCheckInDate === todayDateStr;
+
+      const handleClaimCheckIn = () => {
+        if (hasCheckedInToday) {
+          showToastMsg(isRtl ? 'لقد قمت بتسجيل الدخول لليوم بالفعل!' : 'Already checked in today!');
+          return;
+        }
+        const newStreak = (userState.checkInStreak || 0) + 1;
+        const rewardObj = DAILY_CHECK_IN_REWARDS.find((r) => r.day === newStreak) || { reward: 0 };
+        const reward = rewardObj.reward;
+
+        const newRecord = {
+          id: 'CHK' + Date.now(),
+          type: isRtl ? `تسجيل يومي (اليوم ${newStreak})` : `Daily Check-In (Day ${newStreak})`,
+          amount: reward,
+          date: new Date().toISOString().replace('T', ' ').substring(0, 16),
+          status: 'Success',
+        };
+
+        setUserState((prev) => ({
+          ...prev,
+          balance: Math.round((prev.balance + reward) * 100) / 100,
+          checkInStreak: newStreak,
+          lastCheckInDate: todayDateStr,
+          claimedCheckInDays: [...(prev.claimedCheckInDays || []), newStreak],
+          records: reward > 0 ? [newRecord, ...(prev.records || [])] : (prev.records || []),
+        }));
+
+        if (reward > 0) {
+          showToastMsg(
+            isRtl
+              ? `تهانينا! حصلت على +${reward} USDT لتسجيل اليوم ${newStreak}!`
+              : `Won +${reward} USDT for Day ${newStreak}!`
+          );
+        } else {
+          showToastMsg(
+            isRtl
+              ? `تم تسجيل الحضور بنجاح لليوم ${newStreak}! تبدأ المكافآت من اليوم 3.`
+              : `Checked in for Day ${newStreak}! Cash rewards start on Day 3.`
+          );
+        }
+      };
+
+      const handleSimulateNextDay = () => {
+        setUserState((prev) => ({
+          ...prev,
+          lastCheckInDate: null,
+        }));
+        showToastMsg(
+          isRtl ? 'تم فتح اليوم التالي للتجربة السريعة بنجاح!' : 'Fast-forwarded to next day!'
+        );
       };
 
       // Handle spinning lucky wheel
@@ -1072,61 +1163,103 @@
               )}
             </main>
 
-            {/* Lucky Wheel Floating Action Bubble */}
-            {!showLuckyWheel && (
-              <div
-                style={{
-                  position: 'fixed',
-                  bottom: '4.85rem',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  width: '100%',
-                  maxWidth: '28rem',
-                  pointerEvents: 'none',
-                  zIndex: 35,
-                }}
-                className={`px-4 flex ${isRtl ? 'justify-start' : 'justify-end'}`}
-              >
-                <button
-                  type="button"
-                  onClick={() => setShowLuckyWheel(true)}
-                  style={{ pointerEvents: 'auto' }}
-                  aria-label={isRtl ? 'عجلة الحظ' : 'Lucky Wheel'}
-                  className="group relative flex flex-col items-center cursor-pointer select-none active:scale-90 transition-transform duration-200"
-                  title={isRtl ? 'اضغط لفتح عجلة الحظ' : 'Click to open Lucky Wheel'}
+            {/* Lucky Wheel & Daily Check-In Floating Action Bubbles */}
+            {!showLuckyWheel && !showDailyCheckIn && (
+              <>
+                {/* Lucky Wheel Bubble */}
+                <div
+                  style={{
+                    position: 'fixed',
+                    bottom: '4.85rem',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    width: '100%',
+                    maxWidth: '28rem',
+                    pointerEvents: 'none',
+                    zIndex: 35,
+                  }}
+                  className={`px-4 flex ${isRtl ? 'justify-start' : 'justify-end'}`}
                 >
-                  <span className="absolute -inset-1 rounded-full bg-gradient-to-r from-amber-400 via-rose-500 to-red-600 opacity-70 blur-[5px] group-hover:opacity-100 transition animate-pulse pointer-events-none" />
-                  <div className="relative w-14 h-14 rounded-full bg-gradient-to-tr from-amber-500 via-red-600 to-rose-700 p-0.5 shadow-[0_8px_20px_rgba(220,38,38,0.5)] border-2 border-amber-300 flex items-center justify-center">
-                    <div className="w-full h-full rounded-full bg-gray-950 flex items-center justify-center overflow-hidden relative">
-                      <svg
-                        className="w-10 h-10 animate-spin-slow"
-                        viewBox="0 0 100 100"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
-                      >
-                        <circle cx="50" cy="50" r="46" fill="#111827" stroke="#f59e0b" strokeWidth="4" />
-                        <path d="M50 50 L50 4 A46 46 0 0 1 82.5 17.5 Z" fill="#ef4444" />
-                        <path d="M50 50 L82.5 17.5 A46 46 0 0 1 96 50 Z" fill="#f59e0b" />
-                        <path d="M50 50 L96 50 A46 46 0 0 1 82.5 82.5 Z" fill="#dc2626" />
-                        <path d="M50 50 L82.5 82.5 A46 46 0 0 1 50 96 Z" fill="#fbbf24" />
-                        <path d="M50 50 L50 96 A46 46 0 0 1 17.5 82.5 Z" fill="#b91c1c" />
-                        <path d="M50 50 L17.5 82.5 A46 46 0 0 1 4 50 Z" fill="#f59e0b" />
-                        <path d="M50 50 L4 50 A46 46 0 0 1 17.5 17.5 Z" fill="#ef4444" />
-                        <path d="M50 50 L17.5 17.5 A46 46 0 0 1 50 4 Z" fill="#fde047" />
-                        <circle cx="50" cy="50" r="14" fill="#7f1d1d" stroke="#fef08a" strokeWidth="3" />
-                        <circle cx="50" cy="50" r="6" fill="#fef08a" />
-                      </svg>
-                      <div className="absolute top-0.5 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[7px] border-t-amber-300 drop-shadow" />
+                  <button
+                    type="button"
+                    onClick={() => setShowLuckyWheel(true)}
+                    style={{ pointerEvents: 'auto' }}
+                    aria-label={isRtl ? 'عجلة الحظ' : 'Lucky Wheel'}
+                    className="group relative flex flex-col items-center cursor-pointer select-none active:scale-90 transition-transform duration-200"
+                    title={isRtl ? 'اضغط لفتح عجلة الحظ' : 'Click to open Lucky Wheel'}
+                  >
+                    <span className="absolute -inset-1 rounded-full bg-gradient-to-r from-amber-400 via-rose-500 to-red-600 opacity-70 blur-[5px] group-hover:opacity-100 transition animate-pulse pointer-events-none" />
+                    <div className="relative w-14 h-14 rounded-full bg-gradient-to-tr from-amber-500 via-red-600 to-rose-700 p-0.5 shadow-[0_8px_20px_rgba(220,38,38,0.5)] border-2 border-amber-300 flex items-center justify-center">
+                      <div className="w-full h-full rounded-full bg-gray-950 flex items-center justify-center overflow-hidden relative">
+                        <svg
+                          className="w-10 h-10 animate-spin-slow"
+                          viewBox="0 0 100 100"
+                          fill="none"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <circle cx="50" cy="50" r="46" fill="#111827" stroke="#f59e0b" strokeWidth="4" />
+                          <path d="M50 50 L50 4 A46 46 0 0 1 82.5 17.5 Z" fill="#ef4444" />
+                          <path d="M50 50 L82.5 17.5 A46 46 0 0 1 96 50 Z" fill="#f59e0b" />
+                          <path d="M50 50 L96 50 A46 46 0 0 1 82.5 82.5 Z" fill="#dc2626" />
+                          <path d="M50 50 L82.5 82.5 A46 46 0 0 1 50 96 Z" fill="#fbbf24" />
+                          <path d="M50 50 L50 96 A46 46 0 0 1 17.5 82.5 Z" fill="#b91c1c" />
+                          <path d="M50 50 L17.5 82.5 A46 46 0 0 1 4 50 Z" fill="#f59e0b" />
+                          <path d="M50 50 L4 50 A46 46 0 0 1 17.5 17.5 Z" fill="#ef4444" />
+                          <path d="M50 50 L17.5 17.5 A46 46 0 0 1 50 4 Z" fill="#fde047" />
+                          <circle cx="50" cy="50" r="14" fill="#7f1d1d" stroke="#fef08a" strokeWidth="3" />
+                          <circle cx="50" cy="50" r="6" fill="#fef08a" />
+                        </svg>
+                        <div className="absolute top-0.5 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[7px] border-t-amber-300 drop-shadow" />
+                      </div>
+                      <div className="absolute -top-1 -right-1 bg-gradient-to-r from-red-600 to-rose-600 text-white text-[10px] font-black rounded-full min-w-[20px] h-5 px-1 flex items-center justify-center border-2 border-white shadow-md">
+                        {userState.luckyDrawRemaining > 0 ? userState.luckyDrawRemaining : 0}
+                      </div>
                     </div>
-                    <div className="absolute -top-1 -right-1 bg-gradient-to-r from-red-600 to-rose-600 text-white text-[10px] font-black rounded-full min-w-[20px] h-5 px-1 flex items-center justify-center border-2 border-white shadow-md">
-                      {userState.luckyDrawRemaining > 0 ? userState.luckyDrawRemaining : 0}
+                    <span className="relative -mt-2 bg-gray-900/95 text-amber-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-amber-400/50 shadow-lg tracking-tight whitespace-nowrap">
+                      {isRtl ? 'عجلة الحظ' : 'Lucky Wheel'}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Daily Check-In Bubble */}
+                <div
+                  style={{
+                    position: 'fixed',
+                    bottom: '4.85rem',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    width: '100%',
+                    maxWidth: '28rem',
+                    pointerEvents: 'none',
+                    zIndex: 35,
+                  }}
+                  className={`px-4 flex ${isRtl ? 'justify-end' : 'justify-start'}`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setShowDailyCheckIn(true)}
+                    style={{ pointerEvents: 'auto' }}
+                    aria-label={isRtl ? 'جدول تسجيل الدخول اليومي' : 'Daily Check-In'}
+                    className="group relative flex flex-col items-center cursor-pointer select-none active:scale-90 transition-transform duration-200"
+                    title={isRtl ? 'اضغط لفتح جدول تسجيل الدخول اليومي' : 'Click to open Daily Check-In'}
+                  >
+                    <span className="absolute -inset-1 rounded-full bg-gradient-to-r from-amber-400 via-emerald-500 to-teal-600 opacity-70 blur-[5px] group-hover:opacity-100 transition animate-pulse pointer-events-none" />
+                    <div className="relative w-14 h-14 rounded-full bg-gradient-to-tr from-amber-500 via-emerald-600 to-teal-700 p-0.5 shadow-[0_8px_20px_rgba(16,185,129,0.45)] border-2 border-amber-300 flex items-center justify-center">
+                      <div className="w-full h-full rounded-full bg-gray-950 flex flex-col items-center justify-center overflow-hidden relative">
+                        <Icons.Task className="w-6 h-6 text-amber-300 drop-shadow group-hover:scale-110 transition-transform" />
+                        <span className="text-[9px] font-black text-emerald-400 tracking-tighter leading-none mt-0.5">500$</span>
+                        {!hasCheckedInToday && <span className="absolute top-1.5 right-2 w-2 h-2 rounded-full bg-red-500 animate-ping" />}
+                      </div>
+                      <div className="absolute -top-1 -right-1 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[10px] font-black rounded-full min-w-[22px] h-5 px-1 flex items-center justify-center border-2 border-white shadow-md">
+                        {userState.checkInStreak > 0 ? (isRtl ? `${userState.checkInStreak}ي` : `D${userState.checkInStreak}`) : '30D'}
+                      </div>
                     </div>
-                  </div>
-                  <span className="relative -mt-2 bg-gray-900/95 text-amber-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-amber-400/50 shadow-lg tracking-tight whitespace-nowrap">
-                    {isRtl ? 'عجلة الحظ' : 'Lucky Wheel'}
-                  </span>
-                </button>
-              </div>
+                    <span className="relative -mt-2 bg-gray-900/95 text-emerald-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-emerald-400/50 shadow-lg tracking-tight whitespace-nowrap">
+                      {isRtl ? 'تسجيل يومي' : 'Daily Sign-in'}
+                    </span>
+                  </button>
+                </div>
+              </>
             )}
 
             {/* --- Bottom Navigation --- */}
@@ -1277,6 +1410,145 @@
                           </div>
                         </div>
                       ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Daily Check-In 30-Day Rewards Modal */}
+            {showDailyCheckIn && (
+              <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 overflow-y-auto">
+                <div className="w-full max-w-md bg-white rounded-3xl overflow-hidden shadow-2xl border border-amber-200/60 flex flex-col max-h-[92vh]">
+                  {/* Header */}
+                  <div className="bg-gradient-to-r from-gray-950 via-red-950 to-amber-950 text-white p-4 relative border-b border-amber-500/20">
+                    <button
+                      type="button"
+                      onClick={() => setShowDailyCheckIn(false)}
+                      className="absolute top-3.5 left-3.5 rtl:left-auto rtl:right-3.5 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-gray-300 hover:text-white transition cursor-pointer"
+                    >
+                      <Icons.X className="w-4 h-4" />
+                    </button>
+                    <span className="bg-gradient-to-r from-amber-500 to-red-500 text-gray-950 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider inline-block mb-1">
+                      {isRtl ? 'برنامج المكافآت المتراكمة' : 'Loyalty Check-In'}
+                    </span>
+                    <h2 className="text-lg font-black text-white flex items-center gap-2">
+                      <Icons.Task className="w-5 h-5 text-amber-400" />
+                      <span>{isRtl ? 'جدول تسجيل الدخول اليومي' : 'Daily Check-In Schedule'}</span>
+                    </h2>
+                    <p className="text-xs text-amber-200/90 mt-0.5">
+                      {isRtl
+                        ? 'تبدأ المكافآت من اليوم 3 وتتضاعف حتى 500 USDT في اليوم 30!'
+                        : 'Rewards start from Day 3 & scale up to 500 USDT on Day 30!'}
+                    </p>
+
+                    <div className="mt-3 grid grid-cols-3 gap-2 bg-white/10 rounded-2xl p-2.5 text-center text-xs">
+                      <div>
+                        <span className="text-[10px] text-gray-300 block">{isRtl ? 'السلسلة' : 'Streak'}</span>
+                        <span className="font-black text-amber-300">{userState.checkInStreak || 0} {isRtl ? 'أيام' : 'Days'}</span>
+                      </div>
+                      <div className="border-x border-white/10">
+                        <span className="text-[10px] text-gray-300 block">{isRtl ? 'اليوم التالي' : 'Next'}</span>
+                        <span className="font-black text-white">{isRtl ? `اليوم ${(userState.checkInStreak || 0) + (hasCheckedInToday ? 1 : 1)}` : `Day ${(userState.checkInStreak || 0) + 1}`}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-gray-300 block">{isRtl ? 'الجائزة الكبرى' : 'Top Prize'}</span>
+                        <span className="font-black text-emerald-400">500 USDT</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Notice */}
+                  <div className="bg-amber-50 border-b border-amber-200/80 px-4 py-2 text-[11px] text-amber-900 font-medium">
+                    {isRtl
+                      ? 'ملاحظة: اليوم 1 و 2 لتثبيت السلسلة، وتبدأ المكافآت المالية من اليوم 3 (1.77 USDT).'
+                      : 'Note: Days 1 & 2 establish streak. Cash rewards unlock starting Day 3 (1.77 USDT).'}
+                  </div>
+
+                  {/* 30-Day Grid */}
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                    <div className="grid grid-cols-5 gap-2">
+                      {DAILY_CHECK_IN_REWARDS.map(item => {
+                        const isClaimed = (userState.claimedCheckInDays || []).includes(item.day);
+                        const isCurrentEligible = !hasCheckedInToday && (userState.checkInStreak || 0) + 1 === item.day;
+
+                        return (
+                          <div
+                            key={item.day}
+                            className={`relative rounded-2xl p-2 flex flex-col items-center justify-between text-center transition-all ${
+                              isClaimed
+                                ? 'bg-emerald-50 border border-emerald-300 text-emerald-800'
+                                : isCurrentEligible
+                                ? 'bg-gradient-to-b from-amber-50 to-red-50 border-2 border-red-500 shadow-md ring-2 ring-red-400/30 scale-105 z-10'
+                                : item.day === 30
+                                ? 'bg-amber-100/70 border border-amber-400 text-amber-950 font-bold'
+                                : 'bg-gray-50 border border-gray-200 text-gray-600'
+                            }`}
+                          >
+                            <span className="text-[10px] font-bold block mb-0.5">
+                              {isRtl ? `يوم ${item.day}` : `D${item.day}`}
+                            </span>
+                            <div className="my-1">
+                              {isClaimed ? (
+                                <Icons.Check className="w-5 h-5 text-emerald-600" />
+                              ) : isCurrentEligible ? (
+                                <Icons.Gift className="w-5 h-5 text-red-600 animate-bounce" />
+                              ) : (
+                                <Icons.Clock className="w-4 h-4 text-gray-400" />
+                              )}
+                            </div>
+                            <div className="mt-0.5 leading-tight">
+                              {item.reward > 0 ? (
+                                <span className={`text-[11px] font-black block ${isClaimed ? 'text-emerald-700' : isCurrentEligible ? 'text-red-700 font-extrabold' : 'text-gray-700'}`}>
+                                  +{item.reward}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-gray-400 font-semibold block">{isRtl ? 'حضور' : 'Check'}</span>
+                              )}
+                              <span className="text-[8px] text-gray-400 font-mono block">USDT</span>
+                            </div>
+                            {item.day === 30 && (
+                              <span className="absolute -top-1.5 bg-gradient-to-r from-amber-500 to-red-600 text-white text-[7px] font-black px-1 rounded-full">
+                                500$
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Footer Button */}
+                  <div className="p-4 bg-gray-50 border-t border-gray-200 flex flex-col gap-2">
+                    {!hasCheckedInToday ? (
+                      <button
+                        type="button"
+                        onClick={handleClaimCheckIn}
+                        className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-red-600 via-rose-600 to-amber-500 text-white font-extrabold text-sm shadow-lg shadow-red-500/30 active:scale-98 transition flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <Icons.Task className="w-4 h-4" />
+                        <span>
+                          {isRtl
+                            ? `تسجيل دخول اليوم واستلام المكافأة (اليوم ${(userState.checkInStreak || 0) + 1})`
+                            : `Check-in Today (Day ${(userState.checkInStreak || 0) + 1})`}
+                        </span>
+                      </button>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="w-full py-3 px-4 rounded-2xl bg-emerald-100 border border-emerald-300 text-emerald-900 font-bold text-xs text-center">
+                          {isRtl
+                            ? `تم تسجيل الدخول بنجاح لليوم ${userState.checkInStreak}! عُد غداً لليوم ${(userState.checkInStreak || 0) + 1}`
+                            : `Checked in successfully for Day ${userState.checkInStreak}! Return tomorrow.`}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleSimulateNextDay}
+                          className="w-full py-2 px-3 text-[11px] text-gray-500 hover:text-gray-700 bg-gray-200 rounded-xl font-medium transition cursor-pointer flex items-center justify-center gap-1"
+                        >
+                          <Icons.ArrowRight className="w-3 h-3" />
+                          <span>{isRtl ? 'تجربة اليوم التالي فوراً (وضع المعاينة)' : 'Fast-Forward to Next Day'}</span>
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
